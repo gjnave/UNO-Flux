@@ -114,8 +114,8 @@ class ModelSpec:
 
 configs = {
     "flux-dev": ModelSpec(
-        repo_id="black-forest-labs/FLUX.1-dev",
-        repo_id_ae="black-forest-labs/FLUX.1-dev",
+        repo_id="BestModelsv2/FLUX",
+        repo_id_ae="BestModelsv2/FLUX",
         repo_flow="flux1-dev.safetensors",
         repo_ae="ae.safetensors",
         ckpt_path=os.getenv("FLUX_DEV"),
@@ -147,8 +147,8 @@ configs = {
         ),
     ),
     "flux-dev-fp8": ModelSpec(
-        repo_id="black-forest-labs/FLUX.1-dev",
-        repo_id_ae="black-forest-labs/FLUX.1-dev",
+        repo_id="BestModelsv2/FLUX",
+        repo_id_ae="BestModelsv2/FLUX",
         repo_flow="flux1-dev.safetensors",
         repo_ae="ae.safetensors",
         ckpt_path=os.getenv("FLUX_DEV_FP8"),
@@ -180,8 +180,8 @@ configs = {
         ),
     ),
     "flux-schnell": ModelSpec(
-        repo_id="black-forest-labs/FLUX.1-schnell",
-        repo_id_ae="black-forest-labs/FLUX.1-dev",
+        repo_id="OwlMaster/schnell",
+        repo_id_ae="BestModelsv2/FLUX",
         repo_flow="flux1-schnell.safetensors",
         repo_ae="ae.safetensors",
         ckpt_path=os.getenv("FLUX_SCHNELL"),
@@ -295,13 +295,13 @@ def load_flow_model_only_lora(
 
         if ckpt_path.endswith('safetensors'):
             if use_fp8:
-                print(
-                    "####\n"
-                    "We are in fp8 mode right now, since the fp8 checkpoint of XLabs-AI/flux-dev-fp8 seems broken\n"
-                    "we convert the fp8 checkpoint on flight from bf16 checkpoint\n"
-                    "If your storage is constrained"
-                    "you can save the fp8 checkpoint and replace the bf16 checkpoint by yourself\n"
-                )
+                # print(
+                #     "####\n"
+                #     "We are in fp8 mode right now, since the fp8 checkpoint of XLabs-AI/flux-dev-fp8 seems broken\n"
+                #     "we convert the fp8 checkpoint on flight from bf16 checkpoint\n"
+                #     "If your storage is constrained"
+                #     "you can save the fp8 checkpoint and replace the bf16 checkpoint by yourself\n"
+                # )
                 sd = load_sft(ckpt_path, device="cpu")
                 sd = {k: v.to(dtype=torch.float8_e4m3fn, device=device) for k, v in sd.items()}
             else:
