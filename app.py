@@ -126,10 +126,11 @@ def create_demo(
                         width = gr.Slider(512, 2048, 512, step=20, label="Gneration Width")
                         height = gr.Slider(512, 2048, 512, step=20, label="Gneration Height")
                     with gr.Column():
-                        gr.Markdown("📌 The model trained on 512x512 resolution.\n")
+                        gr.Markdown("📌 Recommended Resolution: 512x512")
                         gr.Markdown(
-                            "The size closer to 512 is more stable,"
-                            " and the higher size e.g. 1024x1024 gives a better visual effect but is less stable.\n512x512 uses 14.5 GB VRAM.\nYou can use SUPIR to upscale after generation"
+                            "This model is specifically trained on 512x512 images. "
+                            "For best performance and image quality, keep your generation size at 512x512. "
+                            "If you need a higher resolution, consider upscaling the output using an external tool."
                         )
 
                 with gr.Accordion("Advanced Options", open=False):
