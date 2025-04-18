@@ -14,7 +14,11 @@
 
 import dataclasses
 import json
+import os
+import subprocess
+import platform
 from pathlib import Path
+from typing import Dict, Optional, Literal
 
 import gradio as gr
 import torch
@@ -30,8 +34,7 @@ def get_examples(examples_dir: str = "assets/examples") -> list:
             continue
         with open(example / "config.json") as f:
             example_dict = json.load(f)
-  
-        
+
         example_list = []
 
         example_list.append(example_dict["useage"])  # case for
@@ -49,12 +52,41 @@ def get_examples(examples_dir: str = "assets/examples") -> list:
     return ans
 
 
+def get_next_filename(folder="outputs"):
+    os.makedirs(folder, exist_ok=True)
+    existing_files = [f for f in os.listdir(folder) if f.endswith('.png') and f[:4].isdigit()]
+    if not existing_files:
+        return os.path.join(folder, "0001.png")
+    numbers = [int(f[:4]) for f in existing_files if f[:4].isdigit()]
+    next_number = max(numbers) + 1 if numbers else 1
+    return os.path.join(folder, f"{next_number:04d}.png")
+
+
+def open_output_folder():
+    folder_path = os.path.abspath("outputs")
+    if platform.system() == "Windows":
+        os.startfile(folder_path)
+    elif platform.system() == "Darwin":
+        subprocess.run(["open", folder_path])
+    else:
+        subprocess.run(["xdg-open", folder_path])
+    return "Opened outputs folder"
+
+
 def create_demo(
-    model_type: str,
     device: str = "cuda" if torch.cuda.is_available() else "cpu",
-    offload: bool = False,
+    offload: bool = True,
 ):
-    pipeline = UNOPipeline(model_type, device, offload, only_lora=True, lora_rank=512)
+    pipelines: Dict[str, Optional[UNOPipeline]] = {
+        "flux-dev": None,
+        "flux-dev-fp8": None,
+        "flux-schnell": None
+    }
+
+    def get_pipeline(model_type: str, offload_setting: bool = offload) -> UNOPipeline:
+        if pipelines[model_type] is None:
+            pipelines[model_type] = UNOPipeline(model_type, device, offload_setting, only_lora=True, lora_rank=512)
+        return pipelines[model_type]
 
     badges_text = r"""
     <div style="text-align: center; display: flex; justify-content: left; gap: 5px;">
@@ -67,10 +99,21 @@ def create_demo(
     """.strip()
 
     with gr.Blocks() as demo:
-        gr.Markdown(f"# UNO by UNO team")
-        gr.Markdown(badges_text)
+        gr.Markdown(f"# ByteDance UNO Improved App V2 - https://www.patreon.com/posts/126674316")
         with gr.Row():
             with gr.Column():
+                with gr.Row():
+                    model_choice = gr.Dropdown(
+                        choices=list(pipelines.keys()),
+                        value="flux-dev-fp8",
+                        label="Model Variant",
+                        info="Select a model variant to use"
+                    )
+                    offload_option = gr.Checkbox(
+                        label="Enable Offload",
+                        value=offload,
+                        info="Offload models to CPU when not in use to save memory"
+                    )
                 prompt = gr.Textbox(label="Prompt", value="handsome woman in the city")
                 with gr.Row():
                     image_prompt1 = gr.Image(label="Ref Img1", visible=True, interactive=True, type="pil")
@@ -80,13 +123,13 @@ def create_demo(
 
                 with gr.Row():
                     with gr.Column():
-                        width = gr.Slider(512, 2048, 512, step=16, label="Gneration Width")
-                        height = gr.Slider(512, 2048, 512, step=16, label="Gneration Height")
+                        width = gr.Slider(512, 2048, 512, step=20, label="Gneration Width")
+                        height = gr.Slider(512, 2048, 512, step=20, label="Gneration Height")
                     with gr.Column():
                         gr.Markdown("📌 The model trained on 512x512 resolution.\n")
                         gr.Markdown(
                             "The size closer to 512 is more stable,"
-                            " and the higher size gives a better visual effect but is less stable"
+                            " and the higher size e.g. 1024x1024 gives a better visual effect but is less stable.\n512x512 uses 14.5 GB VRAM.\nYou can use SUPIR to upscale after generation"
                         )
 
                 with gr.Accordion("Advanced Options", open=False):
@@ -96,22 +139,56 @@ def create_demo(
                         seed = gr.Number(-1, label="Seed (-1 for random)")
 
                 generate_btn = gr.Button("Generate")
+                model_loading_info = gr.Markdown("", visible=False)
 
             with gr.Column():
                 output_image = gr.Image(label="Generated Image")
                 download_btn = gr.File(label="Download full-resolution", type="filepath", interactive=False)
+                open_folder_btn = gr.Button("Open Outputs Folder")
+                folder_status = gr.Markdown("")
 
+            def gradio_generate_wrapper(
+                model_type, offload_enabled, prompt, width, height, guidance, num_steps,
+                seed, image_prompt1, image_prompt2, image_prompt3, image_prompt4
+            ):
+                model_loading_info.visible = True
+                model_loading_info.value = f"Loading model {model_type}..."
+                
+                if pipelines[model_type] is not None and pipelines[model_type].offload != offload_enabled:
+                    pipelines[model_type] = None
+                
+                pipeline = get_pipeline(model_type, offload_enabled)
+                
+                result = pipeline.gradio_generate(
+                    prompt, width, height, guidance, num_steps,
+                    seed, image_prompt1, image_prompt2, image_prompt3, image_prompt4
+                )
+                
+                output_img, download_path = result
+                if output_img is not None:
+                    save_path = get_next_filename()
+                    output_img.save(save_path)
+                    print(f"Image saved to {save_path}")
+                
+                model_loading_info.visible = False
+                return result
 
             inputs = [
-                prompt, width, height, guidance, num_steps,
+                model_choice, offload_option, prompt, width, height, guidance, num_steps,
                 seed, image_prompt1, image_prompt2, image_prompt3, image_prompt4
             ]
             generate_btn.click(
-                fn=pipeline.gradio_generate,
+                fn=gradio_generate_wrapper,
                 inputs=inputs,
                 outputs=[output_image, download_btn],
             )
-        
+            
+            open_folder_btn.click(
+                fn=open_output_folder,
+                inputs=[],
+                outputs=[folder_status]
+            )
+
         example_text = gr.Text("", visible=False, label="Case For:")
         examples = get_examples("./assets/examples")
 
@@ -126,28 +203,27 @@ def create_demo(
 
     return demo
 
+
 if __name__ == "__main__":
     from typing import Literal
-
     from transformers import HfArgumentParser
 
     @dataclasses.dataclass
     class AppArgs:
-        name: Literal["flux-dev", "flux-dev-fp8", "flux-schnell"] = "flux-dev"
-        device: Literal["cuda", "cpu"] = (
-            "cuda" if torch.cuda.is_available() \
-            else "mps" if torch.backends.mps.is_available() \
-            else "cpu"
-        )
+        device: Literal["cuda", "cpu"] = "cuda" if torch.cuda.is_available() else "cpu"
         offload: bool = dataclasses.field(
-            default=False,
+            default=True,
             metadata={"help": "If True, sequantial offload the models(ae, dit, text encoder) to CPU if not used."}
         )
         port: int = 7860
+        share: bool = dataclasses.field(
+            default=False,
+            metadata={"help": "If True, create a publicly shareable link for the app"}
+        )
 
     parser = HfArgumentParser([AppArgs])
-    args_tuple = parser.parse_args_into_dataclasses() # type: tuple[AppArgs]
+    args_tuple = parser.parse_args_into_dataclasses()  # type: tuple[AppArgs]
     args = args_tuple[0]
 
-    demo = create_demo(args.name, args.device, args.offload)
-    demo.launch(server_port=args.port)
+    demo = create_demo(args.device, args.offload)
+    demo.launch(inbrowser=True, share=args.share)
