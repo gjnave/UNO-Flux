@@ -99,7 +99,7 @@ def create_demo(
     """.strip()
 
     with gr.Blocks() as demo:
-        gr.Markdown(f"# ByteDance UNO Improved App V2 - https://www.patreon.com/posts/126674316")
+        gr.Markdown("Listen to Good Music While You Work: https://music.youtube.com/channel/UCY658vbL6S2zlRomNHoX54Q")
         with gr.Row():
             with gr.Column():
                 with gr.Row():
